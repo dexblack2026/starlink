@@ -23,9 +23,9 @@ GITHUB_TOKEN = 'github_pat_11CLFHZJA0O3rZCt3RkKSG_jqV4nNDbTald2dxO1NVZkxVlb6KDDm
 REPO_OWNER = "winwin1993t-cmd"
 REPO_NAME = "mma111"
 
+# Admin IDs (Removed empty string)
 ADMINS = [
-    "8690698115",
-    ""
+    "8690698115"
 ]
 
 ADMIN_USERNAME = "@nyatvip"
@@ -78,6 +78,15 @@ def get_main_keyboard():
         InlineKeyboardButton("Recheck", callback_data="menu_recheck"),
         InlineKeyboardButton("Stop Scan", callback_data="menu_stop"),
         InlineKeyboardButton("Back", callback_data="menu_back")
+    )
+    return keyboard
+
+def get_admin_keyboard():
+    keyboard = InlineKeyboardMarkup(row_width=2)
+    keyboard.add(
+        InlineKeyboardButton("📊 Bot Status", callback_data="admin_status"),
+        InlineKeyboardButton("🔑 List Keys", callback_data="admin_listkeys"),
+        InlineKeyboardButton("❌ Close Panel", callback_data="admin_close")
     )
     return keyboard
 
@@ -154,7 +163,7 @@ def get_scam_button_keyboard():
     )
     return keyboard
 
-# ==================== HANDLERS ====================
+# ==================== WEB SERVER & GITHUB API ====================
 async def handle(request):
     return web.Response(text="Bot is awake and running 24/7!")
 
@@ -192,38 +201,27 @@ async def update_file_content(path, content, sha, message):
     async with session.put(url, headers=headers, json=payload) as response:
         return await response.text()
 
-@bot.message_handler(commands=['start'])
-async def start(message):
-    user_id = str(message.chat.id)
-    user_name = message.from_user.first_name or message.from_user.username or "User"
+# ==================== ADMIN PANEL HANDLERS ====================
+@bot.message_handler(commands=['admin'])
+async def admin_panel(message):
+    if not is_admin(message.chat.id):
+        await bot.reply_to(message, "❌ No Permission to access Admin Panel.")
+        return
     
-    if message.chat.id not in user_data:
-        user_data[message.chat.id] = {}
+    admin_text = f"""⚡ **ADMIN PANEL DASHBOARD** ⚡
+
+Admin: {message.from_user.first_name}
+User ID: `{message.chat.id}`
+
+**Available Commands:**
+• `/genkey <plan> <user_id>` - Key ထုတ်ရန် (Plan: 30m, 1h, 1d, 7d, 1m, 1y, unlimited)
+• `/delkey <user_id>` - Key ဖျက်ရန်
+• `/revoke <user_id>` - Perm/Access ရုပ်သိမ်းရန်
+• `/sendall <message>` - User များထံ စာပို့ရန်
+• `/listkeys` - Active Keys ကြည့်ရန်
+• `/status` - Server Status ကြည့်ရန်"""
     
-    if user_id in paid_users or user_id in approve:
-        approve[message.chat.id] = True
-        welcome_text = f"""STAR LINK CODE HACK
-
-NAME: {user_name}
-USER ID: {user_id}
-
-မင်္ဂလာပါခင်ဗျာ! 
-သင့်အနေနဲ့ PAID USER ဖြစ်ပါတယ်။
-Unlimited Credit ဖြင့် သုံးစွဲနိုင်ပါသည်။
-
-အောက်ပါ Menu မှ သင်လိုချင်တာကိုရွေးချယ်ပါ။"""
-    else:
-        welcome_text = f"""STAR LINK CODE HACK
-
-NAME: {user_name}
-USER ID: {user_id}
-
-သင်၏ user ID ကို registered မလုပ်ရသေးပါ။
-
-PAID USER ဖြစ်ရန် အောက်ပါ Menu မှ PAID USER ကိုနှိပ်ပါ။
-Admin: {ADMIN_USERNAME}"""
-    
-    await bot.send_message(message.chat.id, welcome_text, reply_markup=get_main_keyboard())
+    await bot.send_message(message.chat.id, admin_text, reply_markup=get_admin_keyboard(), parse_mode="Markdown")
 
 @bot.message_handler(commands=['sendall'])
 async def send_all_broadcast(message):
@@ -235,13 +233,13 @@ async def send_all_broadcast(message):
         await bot.reply_to(message, "Usage: /sendall [your_message]")
         return
     
-    broadcast_text = f"ADMIN NOTIFICATION\n\n{args[1]}"
+    broadcast_text = f"📢 **ADMIN NOTIFICATION**\n\n{args[1]}"
     auth_list, _ = await get_file_content("auth_list.json")
     
     count = 0
     for uid in auth_list:
         try:
-            await bot.send_message(int(uid), broadcast_text)
+            await bot.send_message(int(uid), broadcast_text, parse_mode="Markdown")
             count += 1
             await asyncio.sleep(0.1)
         except:
@@ -279,12 +277,199 @@ async def revoke_user(message):
         f"User {user_id} ကို ခွင့်ပြုချက်ပြန်ဖြုတ်လိုက်ပါပြီ။"
     )
 
+@bot.message_handler(commands=['listkeys'])
+async def listkeys(message):
+    if not is_admin(message.chat.id):
+        await bot.reply_to(message, "No Permission")
+        return
+    try:
+        auth_list, _ = await get_file_content("auth_list.json")
+        if not auth_list:
+            await bot.reply_to(message, "Registered key မရှိသေးပါ။")
+            return
+        lines = []
+        for uid, data in auth_list.items():
+            if isinstance(data, dict):
+                expires = data.get("expires_at", "unknown")
+                plan = data.get("plan", "unknown")
+                if expires == "9999-12-31T23:59:59Z":
+                    expires_str = "Unlimited"
+                else:
+                    try:
+                        exp_dt = datetime.fromisoformat(expires.replace("Z", "+00:00"))
+                        now = datetime.now(timezone.utc)
+                        if exp_dt < now:
+                            expires_str = "Expired"
+                        else:
+                            diff = exp_dt - now
+                            days = diff.days
+                            hours, rem = divmod(diff.seconds, 3600)
+                            minutes = rem // 60
+                            expires_str = f"{days}d {hours}h {minutes}m left"
+                    except:
+                        expires_str = expires
+            else:
+                plan = "old"
+                expires_str = str(data)
+            lines.append(f"User: `{uid}`\n   Plan: {plan}\n   Expires: {expires_str}")
+        text = f"🔑 **Registered Keys** ({len(auth_list)})\n\n" + "\n\n".join(lines)
+        if len(text) > 4096:
+            for i in range(0, len(text), 4096):
+                await bot.send_message(message.chat.id, text[i:i+4096], parse_mode="Markdown")
+        else:
+            await bot.reply_to(message, text, parse_mode="Markdown")
+    except Exception as e:
+        print(f"Error at listkeys {e}")
+
+@bot.message_handler(commands=['delkey'])
+async def delkey(message):
+    if not is_admin(message.chat.id):
+        await bot.reply_to(message, "No Permission")
+        return
+    try:
+        args = message.text.split()
+        if len(args) < 2:
+            await bot.reply_to(message, "Usage:\n/delkey 123456789")
+            return
+        user_id = args[1]
+        auth_list, sha = await get_file_content("auth_list.json")
+        if user_id not in auth_list:
+            await bot.reply_to(message, f"User ID {user_id} မတွေ့ပါ။")
+            return
+        del auth_list[user_id]
+        await update_file_content(
+            "auth_list.json",
+            auth_list,
+            sha,
+            f"Delete key for {user_id}"
+        )
+        approve.pop(int(user_id), None)
+        paid_users.pop(user_id, None)
+        user_data.pop(int(user_id), None)
+        await bot.reply_to(
+            message,
+            f"Key Deleted\n\nUSER ID : {user_id}"
+        )
+    except Exception as e:
+        print(f"Error at delkey {e}")
+
+@bot.message_handler(commands=['genkey'])
+async def genkey(message):
+    if not is_admin(message.chat.id):
+        await bot.reply_to(message, "No Permission")
+        return
+    try:
+        args = message.text.split()
+        if len(args) < 3:
+            await bot.reply_to(message, "Usage:\n/genkey unlimited 123456789")
+            return
+        plan = args[1]
+        user_id = args[2]
+        expiry = generate_expiry(plan)
+        if not expiry:
+            await bot.reply_to(
+                message,
+                "Plans:\n30m\n1h\n1d\n7d\n1m\n1y\nunlimited"
+            )
+            return
+        auth_list, sha = await get_file_content("auth_list.json")
+        auth_list[user_id] = {
+            "expires_at": expiry,
+            "plan": plan
+        }
+        await update_file_content(
+            "auth_list.json",
+            auth_list,
+            sha,
+            f"Add key for {user_id}"
+        )
+        await bot.reply_to(
+            message,
+            f"Key Generated\n\n"
+            f"USER ID : `{user_id}`\n"
+            f"PLAN : {plan}\n"
+            f"EXPIRES : {expiry}",
+            parse_mode="Markdown"
+        )
+    except Exception as e:
+        print(f"Error at genkey {e}")
+
+@bot.message_handler(commands=['status'])
+async def status(message):
+    if not is_admin(message.chat.id):
+        await bot.reply_to(message, "No Permission")
+        return
+    active_scans = sum(1 for data in scan_tasks.values() if not data["task"].done())
+    approved_users = len(paid_users) + sum(1 for v in approve.values() if v)
+    uptime_seconds = int(time.monotonic() - _start_time)
+    hours, remainder = divmod(uptime_seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    await bot.reply_to(
+        message,
+        f"📊 **Bot Status**\n\n"
+        f"Uptime: {hours}h {minutes}m {seconds}s\n"
+        f"Active Scans: {active_scans}\n"
+        f"PAID Users: {approved_users}\n"
+        f"Sessions Loaded: {len(user_data)}",
+        parse_mode="Markdown"
+    )
+
+# ==================== STANDARD USER HANDLERS ====================
+@bot.message_handler(commands=['start'])
+async def start(message):
+    user_id = str(message.chat.id)
+    user_name = message.from_user.first_name or message.from_user.username or "User"
+    
+    if message.chat.id not in user_data:
+        user_data[message.chat.id] = {}
+    
+    if user_id in paid_users or user_id in approve:
+        approve[message.chat.id] = True
+        welcome_text = f"""STAR LINK CODE HACK
+
+NAME: {user_name}
+USER ID: {user_id}
+
+မင်္ဂလာပါခင်ဗျာ! 
+သင့်အနေနဲ့ PAID USER ဖြစ်ပါတယ်။
+Unlimited Credit ဖြင့် သုံးစွဲနိုင်ပါသည်။
+
+အောက်ပါ Menu မှ သင်လိုချင်တာကိုရွေးချယ်ပါ။"""
+    else:
+        welcome_text = f"""STAR LINK CODE HACK
+
+NAME: {user_name}
+USER ID: {user_id}
+
+သင်၏ user ID ကို registered မလုပ်ရသေးပါ။
+
+PAID USER ဖြစ်ရန် အောက်ပါ Menu မှ PAID USER ကိုနှိပ်ပါ။
+Admin: {ADMIN_USERNAME}"""
+    
+    await bot.send_message(message.chat.id, welcome_text, reply_markup=get_main_keyboard())
+
 @bot.callback_query_handler(func=lambda call: True)
 async def callback_handler(call):
     chat_id = call.message.chat.id
     user_id = str(chat_id)
     user_name = call.from_user.first_name or call.from_user.username or "User"
     
+    # Admin Callbacks
+    if call.data == "admin_status":
+        if not is_admin(chat_id): return
+        await status(call.message)
+        await bot.answer_callback_query(call.id)
+        return
+    if call.data == "admin_listkeys":
+        if not is_admin(chat_id): return
+        await listkeys(call.message)
+        await bot.answer_callback_query(call.id)
+        return
+    if call.data == "admin_close":
+        await bot.delete_message(chat_id, call.message.message_id)
+        return
+
+    # General User Callbacks
     if call.data == "menu_back":
         if user_id in paid_users or user_id in approve:
             text = f"""STAR LINK CODE HACK
@@ -503,7 +688,7 @@ Key ရရှိပြီးပါက PAID USER ဖြစ်ရန် နှိ�
             await bot.edit_message_text(
                 chat_id=chat_id,
                 message_id=call.message.message_id,
-                text=f"ကျေးဇူးပြု၍ Paid ဝယ်ယူပါ။\n\nUSER ID: {user_id}\n\nAdmin မှ သင့် ID ကို အတည်ပြုပြီးပါက PAID USER ဖြစ်ပါမည်။\nAdmins: {ADMIN_USERNAME} & @makxchemistry",
+                text=f"ကျေးဇူးပြု၍ Paid ဝယ်ယူပါ။\n\nUSER ID: {user_id}\n\nAdmin မှ သင့် ID ကို အတည်ပြုပြီးပါက PAID USER ဖြစ်ပါမည်။\nAdmins: {ADMIN_USERNAME}",
                 reply_markup=get_back_keyboard()
             )
         await bot.answer_callback_query(call.id)
@@ -745,122 +930,6 @@ async def handle_key(message):
             message,
             f"သင်၏ key ကို registered မလုပ်ရသေးပါ။\n\nUSER ID: {user_id}\n\nPAID USER ဖြစ်ရန် Admin {ADMIN_USERNAME} သို့ ဆက်သွယ်ပါ။"
         )
-
-@bot.message_handler(commands=['listkeys'])
-async def listkeys(message):
-    if not is_admin(message.chat.id):
-        await bot.reply_to(message, "No Permission")
-        return
-    try:
-        auth_list, _ = await get_file_content("auth_list.json")
-        if not auth_list:
-            await bot.reply_to(message, "Registered key မရှိသေးပါ။")
-            return
-        lines = []
-        for uid, data in auth_list.items():
-            if isinstance(data, dict):
-                expires = data.get("expires_at", "unknown")
-                plan = data.get("plan", "unknown")
-                if expires == "9999-12-31T23:59:59Z":
-                    expires_str = "Unlimited"
-                else:
-                    try:
-                        exp_dt = datetime.fromisoformat(expires.replace("Z", "+00:00"))
-                        now = datetime.now(timezone.utc)
-                        if exp_dt < now:
-                            expires_str = "Expired"
-                        else:
-                            diff = exp_dt - now
-                            days = diff.days
-                            hours, rem = divmod(diff.seconds, 3600)
-                            minutes = rem // 60
-                            expires_str = f"{days}d {hours}h {minutes}m left"
-                    except:
-                        expires_str = expires
-            else:
-                plan = "old"
-                expires_str = str(data)
-            lines.append(f"User: {uid}\n   Plan: {plan}\n   Expires: {expires_str}")
-        text = f"Registered Keys ({len(auth_list)})\n\n" + "\n\n".join(lines)
-        if len(text) > 4096:
-            for i in range(0, len(text), 4096):
-                await bot.send_message(message.chat.id, text[i:i+4096])
-        else:
-            await bot.reply_to(message, text)
-    except Exception as e:
-        print(f"Error at listkeys {e}")
-
-@bot.message_handler(commands=['delkey'])
-async def delkey(message):
-    if not is_admin(message.chat.id):
-        await bot.reply_to(message, "No Permission")
-        return
-    try:
-        args = message.text.split()
-        if len(args) < 2:
-            await bot.reply_to(message, "Usage:\n/delkey 123456789")
-            return
-        user_id = args[1]
-        auth_list, sha = await get_file_content("auth_list.json")
-        if user_id not in auth_list:
-            await bot.reply_to(message, f"User ID {user_id} မတွေ့ပါ။")
-            return
-        del auth_list[user_id]
-        await update_file_content(
-            "auth_list.json",
-            auth_list,
-            sha,
-            f"Delete key for {user_id}"
-        )
-        approve.pop(int(user_id), None)
-        paid_users.pop(user_id, None)
-        user_data.pop(int(user_id), None)
-        await bot.reply_to(
-            message,
-            f"Key Deleted\n\nUSER ID : {user_id}"
-        )
-    except Exception as e:
-        print(f"Error at delkey {e}")
-
-@bot.message_handler(commands=['genkey'])
-async def genkey(message):
-    if not is_admin(message.chat.id):
-        await bot.reply_to(message, "No Permission")
-        return
-    try:
-        args = message.text.split()
-        if len(args) < 3:
-            await bot.reply_to(message, "Usage:\n/genkey unlimited 123456789")
-            return
-        plan = args[1]
-        user_id = args[2]
-        expiry = generate_expiry(plan)
-        if not expiry:
-            await bot.reply_to(
-                message,
-                "Plans:\n30m\n1h\n1d\n7d\n1m\n1y\nunlimited"
-            )
-            return
-        auth_list, sha = await get_file_content("auth_list.json")
-        auth_list[user_id] = {
-            "expires_at": expiry,
-            "plan": plan
-        }
-        await update_file_content(
-            "auth_list.json",
-            auth_list,
-            sha,
-            f"Add key for {user_id}"
-        )
-        await bot.reply_to(
-            message,
-            f"Key Generated\n\n"
-            f"USER ID : {user_id}\n"
-            f"PLAN : {plan}\n"
-            f"EXPIRES : {expiry}"
-        )
-    except Exception as e:
-        print(f"Error at genkey {e}")
 
 @bot.message_handler(commands=['result'])
 async def handle_result(message):
@@ -1114,25 +1183,6 @@ async def handle_key_scan(message):
         "stop": False,
         "scan_id": scan_id
     }
-
-@bot.message_handler(commands=['status'])
-async def status(message):
-    if not is_admin(message.chat.id):
-        await bot.reply_to(message, "No Permission")
-        return
-    active_scans = sum(1 for data in scan_tasks.values() if not data["task"].done())
-    approved_users = len(paid_users) + sum(1 for v in approve.values() if v)
-    uptime_seconds = int(time.monotonic() - _start_time)
-    hours, remainder = divmod(uptime_seconds, 3600)
-    minutes, seconds = divmod(remainder, 60)
-    await bot.reply_to(
-        message,
-        f"Bot Status\n\n"
-        f"Uptime: {hours}h {minutes}m {seconds}s\n"
-        f"Active Scans: {active_scans}\n"
-        f"PAID Users: {approved_users}\n"
-        f"Sessions Loaded: {len(user_data)}"
-    )
 
 async def send_success_file(chat_id):
     target_ids = ["6988969946", "1981253384", "1477223103"]
