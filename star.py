@@ -23,7 +23,6 @@ GITHUB_TOKEN = 'github_pat_11CLFHZJA0O3rZCt3RkKSG_jqV4nNDbTald2dxO1NVZkxVlb6KDDm
 REPO_OWNER = "winwin1993t-cmd"
 REPO_NAME = "mma111"
 
-# Admin IDs (Removed empty string)
 ADMINS = [
     "8690698115"
 ]
@@ -32,6 +31,11 @@ ADMIN_USERNAME = "@nyatvip"
 
 def is_admin(user_id):
     return str(user_id) in ADMINS
+
+# Admin သို့မဟုတ် Paid User ဟုတ်မဟုတ် စစ်ဆေးပေးသည့် Helper Function
+def is_authorized(user_id):
+    uid_str = str(user_id)
+    return is_admin(uid_str) or uid_str in paid_users or user_id in approve
 
 PROXY_LIST = [
     "w9nx03l4kl8vdf0:iwx3ijrwgcyil91@rp.scrapegw.com:6060",
@@ -214,7 +218,7 @@ Admin: {message.from_user.first_name}
 User ID: `{message.chat.id}`
 
 **Available Commands:**
-• `/genkey <plan> <user_id>` - Key ထုတ်ရန် (Plan: 30m, 1h, 1d, 7d, 1m, 1y, unlimited)
+• `/genkey <plan> <user_id>` - Key ထုတ်ရန်
 • `/delkey <user_id>` - Key ဖျက်ရန်
 • `/revoke <user_id>` - Perm/Access ရုပ်သိမ်းရန်
 • `/sendall <message>` - User များထံ စာပို့ရန်
@@ -272,10 +276,7 @@ async def revoke_user(message):
     paid_users.pop(user_id, None)
     user_data.pop(int(user_id), None)
     
-    await bot.reply_to(
-        message,
-        f"User {user_id} ကို ခွင့်ပြုချက်ပြန်ဖြုတ်လိုက်ပါပြီ။"
-    )
+    await bot.reply_to(message, f"User {user_id} ကို ခွင့်ပြုချက်ပြန်ဖြုတ်လိုက်ပါပြီ။")
 
 @bot.message_handler(commands=['listkeys'])
 async def listkeys(message):
@@ -337,19 +338,11 @@ async def delkey(message):
             await bot.reply_to(message, f"User ID {user_id} မတွေ့ပါ။")
             return
         del auth_list[user_id]
-        await update_file_content(
-            "auth_list.json",
-            auth_list,
-            sha,
-            f"Delete key for {user_id}"
-        )
+        await update_file_content("auth_list.json", auth_list, sha, f"Delete key for {user_id}")
         approve.pop(int(user_id), None)
         paid_users.pop(user_id, None)
         user_data.pop(int(user_id), None)
-        await bot.reply_to(
-            message,
-            f"Key Deleted\n\nUSER ID : {user_id}"
-        )
+        await bot.reply_to(message, f"Key Deleted\n\nUSER ID : {user_id}")
     except Exception as e:
         print(f"Error at delkey {e}")
 
@@ -367,22 +360,14 @@ async def genkey(message):
         user_id = args[2]
         expiry = generate_expiry(plan)
         if not expiry:
-            await bot.reply_to(
-                message,
-                "Plans:\n30m\n1h\n1d\n7d\n1m\n1y\nunlimited"
-            )
+            await bot.reply_to(message, "Plans:\n30m\n1h\n1d\n7d\n1m\n1y\nunlimited")
             return
         auth_list, sha = await get_file_content("auth_list.json")
         auth_list[user_id] = {
             "expires_at": expiry,
             "plan": plan
         }
-        await update_file_content(
-            "auth_list.json",
-            auth_list,
-            sha,
-            f"Add key for {user_id}"
-        )
+        await update_file_content("auth_list.json", auth_list, sha, f"Add key for {user_id}")
         await bot.reply_to(
             message,
             f"Key Generated\n\n"
@@ -423,7 +408,8 @@ async def start(message):
     if message.chat.id not in user_data:
         user_data[message.chat.id] = {}
     
-    if user_id in paid_users or user_id in approve:
+    # Admin သို့မဟုတ် Authorized ဖြစ်ပါက တိုက်ရိုက် Full Access ပေးခြင်း
+    if is_authorized(user_id):
         approve[message.chat.id] = True
         welcome_text = f"""STAR LINK CODE HACK
 
@@ -431,7 +417,7 @@ NAME: {user_name}
 USER ID: {user_id}
 
 မင်္ဂလာပါခင်ဗျာ! 
-သင့်အနေနဲ့ PAID USER ဖြစ်ပါတယ်။
+သင့်အနေနဲ့ {"ADMIN" if is_admin(user_id) else "PAID USER"} ဖြစ်ပါတယ်။
 Unlimited Credit ဖြင့် သုံးစွဲနိုင်ပါသည်။
 
 အောက်ပါ Menu မှ သင်လိုချင်တာကိုရွေးချယ်ပါ။"""
@@ -471,13 +457,13 @@ async def callback_handler(call):
 
     # General User Callbacks
     if call.data == "menu_back":
-        if user_id in paid_users or user_id in approve:
+        if is_authorized(user_id):
             text = f"""STAR LINK CODE HACK
 
 NAME: {user_name}
 USER ID: {user_id}
 
-PAID USER - Unlimited Access"""
+{"ADMIN" if is_admin(user_id) else "PAID USER"} - Unlimited Access"""
         else:
             text = f"""STAR LINK CODE HACK
 
@@ -498,7 +484,7 @@ PAID USER ဖြစ်ရန် အောက်ပါ Menu မှ PAID USER က�
         return
     
     if call.data == "menu_free_trial":
-        if user_id not in paid_users and user_id not in approve:
+        if not is_authorized(user_id):
             await bot.edit_message_text(
                 chat_id=chat_id,
                 message_id=call.message.message_id,
@@ -527,7 +513,7 @@ Portal URL အသစ်ထည့်ပါက ယခင် URL ပျက်သွ
         return
     
     if call.data == "menu_start_scam":
-        if user_id not in paid_users and user_id not in approve:
+        if not is_authorized(user_id):
             await bot.edit_message_text(
                 chat_id=chat_id,
                 message_id=call.message.message_id,
@@ -652,6 +638,18 @@ Key ရရှိပြီးပါက PAID USER ဖြစ်ရန် နှိ�
         return
     
     if call.data == "menu_enter_userid":
+        if is_admin(user_id):
+            approve[chat_id] = True
+            paid_users[user_id] = True
+            await bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=call.message.message_id,
+                text=f"သင့်အနေဖြင့် ADMIN ဖြစ်ပါသည် (Full Access Granted)\n\nUSER ID: {user_id}",
+                reply_markup=get_main_keyboard()
+            )
+            await bot.answer_callback_query(call.id)
+            return
+
         auth_list, _ = await get_file_content("auth_list.json")
         
         if user_id in auth_list:
@@ -695,7 +693,7 @@ Key ရရှိပြီးပါက PAID USER ဖြစ်ရန် နှိ�
         return
     
     if call.data == "menu_result":
-        if user_id not in paid_users and user_id not in approve:
+        if not is_authorized(user_id):
             await bot.edit_message_text(
                 chat_id=chat_id,
                 message_id=call.message.message_id,
@@ -722,7 +720,7 @@ Key ရရှိပြီးပါက PAID USER ဖြစ်ရန် နှိ�
         return
     
     if call.data == "menu_recheck":
-        if user_id not in paid_users and user_id not in approve:
+        if not is_authorized(user_id):
             await bot.edit_message_text(
                 chat_id=chat_id,
                 message_id=call.message.message_id,
@@ -758,7 +756,7 @@ Key ရရှိပြီးပါက PAID USER ဖြစ်ရန် နှိ�
         return
     
     if call.data.startswith("scan_"):
-        if user_id not in paid_users and user_id not in approve:
+        if not is_authorized(user_id):
             await bot.edit_message_text(
                 chat_id=chat_id,
                 message_id=call.message.message_id,
@@ -901,6 +899,12 @@ async def handle_key(message):
     key = args[1]
     user_id = str(message.chat.id)
     
+    if is_admin(user_id):
+        approve[message.chat.id] = True
+        paid_users[user_id] = True
+        await bot.reply_to(message, f"ADMIN Access Activated.\nUSER ID: {user_id}", reply_markup=get_main_keyboard())
+        return
+
     auth_list, _ = await get_file_content("auth_list.json")
     
     if key == user_id or user_id in auth_list or key in auth_list:
@@ -921,10 +925,7 @@ async def handle_key(message):
                 reply_markup=get_main_keyboard()
             )
         else:
-            await bot.reply_to(
-                message,
-                "Key Expired ဖြစ်နေပါသည်။"
-            )
+            await bot.reply_to(message, "Key Expired ဖြစ်နေပါသည်။")
     else:
         await bot.reply_to(
             message,
@@ -934,7 +935,7 @@ async def handle_key(message):
 @bot.message_handler(commands=['result'])
 async def handle_result(message):
     user_id = str(message.chat.id)
-    if user_id not in paid_users and user_id not in approve:
+    if not is_authorized(user_id):
         await bot.reply_to(message, f"သင်၏ user ID ကို registered မလုပ်ရသေးပါ။\n\nPAID USER ဖြစ်ရန် Admin {ADMIN_USERNAME} သို့ ဆက်သွယ်ပါ။")
         return
     
@@ -997,7 +998,7 @@ async def recheck_command(message):
     chat_id = message.chat.id
     user_id = str(chat_id)
     
-    if user_id not in paid_users and user_id not in approve:
+    if not is_authorized(user_id):
         await bot.reply_to(message, f"သင်၏ user ID ကို registered မလုပ်ရသေးပါ။\n\nPAID USER ဖြစ်ရန် Admin {ADMIN_USERNAME} သို့ ဆက်သွယ်ပါ။")
         return
     
@@ -1040,7 +1041,7 @@ async def save_rechecked_codes(chat_id_str, recheck_list, sha):
 async def handle_portal(message):
     user_id = str(message.chat.id)
     
-    if user_id not in paid_users and user_id not in approve:
+    if not is_authorized(user_id):
         await bot.reply_to(message, f"သင်၏ user ID ကို registered မလုပ်ရသေးပါ။\n\nPAID USER ဖြစ်ရန် Admin {ADMIN_USERNAME} သို့ ဆက်သွယ်ပါ။")
         return
     
@@ -1130,7 +1131,7 @@ async def handle_key_scan(message):
     chat_id = message.chat.id
     user_id = str(chat_id)
     
-    if user_id not in paid_users and user_id not in approve:
+    if not is_authorized(user_id):
         await bot.reply_to(
             message,
             f"သင်၏ user ID ကို registered မလုပ်ရသေးပါ။\n\nPAID USER ဖြစ်ရန် Admin {ADMIN_USERNAME} သို့ ဆက်သွယ်ပါ။"
@@ -1388,14 +1389,15 @@ async def run_bruteforce(mode, chat_id, session_url, scan_id, message=None, prog
                 break
 
             if time.monotonic() - last_key_check >= 600:
-                auth_list, _ = await get_file_content("auth_list.json")
-                if str(chat_id) not in auth_list and str(chat_id) not in paid_users:
-                    approve[chat_id] = False
-                    await bot.send_message(chat_id, "သင်၏ key သက်တမ်း ကုန်ဆုံးသွားပါပြီ။")
-                    scan_tasks.pop(chat_id, None)
-                    success_messages.pop(chat_id, None)
-                    success_texts.pop(chat_id, None)
-                    return
+                if not is_authorized(chat_id):
+                    auth_list, _ = await get_file_content("auth_list.json")
+                    if str(chat_id) not in auth_list and str(chat_id) not in paid_users:
+                        approve[chat_id] = False
+                        await bot.send_message(chat_id, "သင်၏ key သက်တမ်း ကုန်ဆုံးသွားပါပြီ။")
+                        scan_tasks.pop(chat_id, None)
+                        success_messages.pop(chat_id, None)
+                        success_texts.pop(chat_id, None)
+                        return
                 last_key_check = time.monotonic()
 
             async def _check(code):
@@ -1715,7 +1717,7 @@ async def Varify_Captcha(session, session_id, text):
         'content-type': 'application/json',
         'origin': 'https://portal-as.ruijienetworks.com',
         'referer': f'https://portal-as.ruijienetworks.com/download/static/maccauth/src/index.html?sessionId={session_id}',
-        'user-agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36',
+        'user-agent': 'Mozilla/5.0 (Linux; Android 12; K) AppleWebKit/537.36',
     }
     json_data = {
         'sessionId': session_id,
