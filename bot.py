@@ -70,15 +70,14 @@ admin_logs = []
 MAX_LOGS = 100
 
 # Pending user requests
-pending_requests = {}  # {user_id: {'name': name, 'timestamp': time}}
-pending_keys = {}  # {admin_id: {'user_id': user_id, 'plan': plan}}
+pending_requests = {}
+pending_keys = {}
 
-# Global portal URL (admin can set)
+# Global portal URL
 global_portal_url = None
 
 # ==================== GITHUB FUNCTIONS ====================
 async def get_file_content(path):
-    """Get file content from GitHub"""
     url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/{path}"
     headers = {"Authorization": f"token {GITHUB_TOKEN}"}
     try:
@@ -87,15 +86,12 @@ async def get_file_content(path):
                 data = await response.json()
                 content = base64.b64decode(data['content']).decode('utf-8')
                 return json.loads(content), data['sha']
-            else:
-                logger.warning(f"GitHub get error: {response.status}")
-                return {}, None
+            return {}, None
     except Exception as e:
         logger.error(f"GitHub get error: {e}")
         return {}, None
 
 async def update_file_content(path, content, sha, message):
-    """Update file content on GitHub"""
     url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/{path}"
     headers = {
         "Authorization": f"token {GITHUB_TOKEN}",
@@ -111,20 +107,16 @@ async def update_file_content(path, content, sha, message):
         async with session.put(url, headers=headers, json=payload) as response:
             if response.status in [200, 201]:
                 return await response.text()
-            else:
-                logger.warning(f"GitHub update error: {response.status}")
-                return None
+            return None
     except Exception as e:
         logger.error(f"GitHub update error: {e}")
         return None
 
 # ==================== ADMIN PANEL FUNCTIONS ====================
 def is_admin(user_id):
-    """Check if user is admin"""
     return str(user_id) in ADMINS
 
 def add_admin_log(action, details=""):
-    """Add log entry"""
     global admin_logs
     log_entry = {
         'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
@@ -137,7 +129,6 @@ def add_admin_log(action, details=""):
     logger.info(f"[ADMIN LOG] {action}: {details}")
 
 async def update_admin_stats():
-    """Update admin statistics"""
     global admin_stats
     try:
         auth_list, _ = await get_file_content("auth_list.json")
@@ -181,7 +172,6 @@ async def update_admin_stats():
         logger.error(f"Update admin stats error: {e}")
 
 def generate_expiry(plan):
-    """Generate expiry date based on plan"""
     now = datetime.now(timezone.utc)
     plans = {
         "30m": timedelta(minutes=30),
@@ -199,7 +189,6 @@ def generate_expiry(plan):
     return (now + plans[plan]).isoformat()
 
 def format_uptime():
-    """Format uptime"""
     uptime_seconds = int(time.monotonic() - _start_time)
     hours, remainder = divmod(uptime_seconds, 3600)
     minutes, seconds = divmod(remainder, 60)
@@ -208,7 +197,6 @@ def format_uptime():
 # ==================== KEYBOARDS ====================
 
 def get_admin_main_keyboard():
-    """Admin main keyboard"""
     keyboard = InlineKeyboardMarkup(row_width=2)
     keyboard.add(
         InlineKeyboardButton("📊 Dashboard", callback_data="admin_dashboard"),
@@ -226,7 +214,6 @@ def get_admin_main_keyboard():
     return keyboard
 
 def get_admin_back_keyboard():
-    """Admin back keyboard"""
     keyboard = InlineKeyboardMarkup(row_width=1)
     keyboard.add(
         InlineKeyboardButton("🔙 Back to Admin Panel", callback_data="admin_panel")
@@ -234,7 +221,6 @@ def get_admin_back_keyboard():
     return keyboard
 
 def get_plan_keyboard():
-    """Plan selection keyboard"""
     keyboard = InlineKeyboardMarkup(row_width=3)
     keyboard.add(
         InlineKeyboardButton("30m", callback_data="plan_30m"),
@@ -249,7 +235,6 @@ def get_plan_keyboard():
     return keyboard
 
 def get_pending_request_keyboard(user_id, user_name):
-    """Pending request keyboard with accept/reject buttons"""
     keyboard = InlineKeyboardMarkup(row_width=2)
     keyboard.add(
         InlineKeyboardButton(f"✅ Accept {user_name}", callback_data=f"accept_{user_id}"),
@@ -261,7 +246,6 @@ def get_pending_request_keyboard(user_id, user_name):
     return keyboard
 
 def get_main_keyboard():
-    """Main user keyboard"""
     keyboard = InlineKeyboardMarkup(row_width=2)
     keyboard.add(
         InlineKeyboardButton("🎫 PAID USER", callback_data="menu_paid"),
@@ -274,7 +258,6 @@ def get_main_keyboard():
     return keyboard
 
 def get_voucher_keyboard():
-    """Voucher selection keyboard"""
     keyboard = InlineKeyboardMarkup(row_width=2)
     keyboard.add(
         InlineKeyboardButton("🔢 VOUCHER 6 လုံး", callback_data="scan_6"),
@@ -293,7 +276,6 @@ def get_voucher_keyboard():
     return keyboard
 
 def get_digit_keyboard(mode):
-    """Digit selection keyboard"""
     keyboard = InlineKeyboardMarkup(row_width=5)
     buttons = []
     for i in range(10):
@@ -304,7 +286,6 @@ def get_digit_keyboard(mode):
     return keyboard
 
 def get_start_scam_keyboard():
-    """Start scam keyboard"""
     keyboard = InlineKeyboardMarkup(row_width=1)
     keyboard.add(
         InlineKeyboardButton("🚀 START SCAM", callback_data="menu_start_scam"),
@@ -313,7 +294,6 @@ def get_start_scam_keyboard():
     return keyboard
 
 def get_paid_keyboard():
-    """Paid user keyboard"""
     keyboard = InlineKeyboardMarkup(row_width=1)
     keyboard.add(
         InlineKeyboardButton("✅ PAID USER ဖြစ်ရန်", callback_data="menu_enter_userid"),
@@ -322,13 +302,11 @@ def get_paid_keyboard():
     return keyboard
 
 def get_back_keyboard():
-    """Back keyboard"""
     keyboard = InlineKeyboardMarkup(row_width=1)
     keyboard.add(InlineKeyboardButton("🔙 Back", callback_data="menu_back"))
     return keyboard
 
 def get_scam_button_keyboard():
-    """Scam button keyboard"""
     keyboard = InlineKeyboardMarkup(row_width=1)
     keyboard.add(
         InlineKeyboardButton("🛑 STOP SCAM", callback_data="menu_stop"),
@@ -340,7 +318,6 @@ def get_scam_button_keyboard():
 
 @bot.message_handler(commands=['start'])
 async def start(message):
-    """Start command handler"""
     try:
         user_id = str(message.chat.id)
         user_name = message.from_user.first_name or message.from_user.username or "User"
@@ -365,7 +342,6 @@ Welcome to Admin Panel!"""
             add_admin_log("Admin Login", f"User: {user_name} ({user_id})")
             return
         
-        # Check if user is already approved
         if user_id in paid_users or user_id in approve:
             approve[message.chat.id] = True
             welcome_text = f"""✨ STAR LINK CODE HACK ✨
@@ -381,7 +357,6 @@ Welcome to Admin Panel!"""
             await bot.send_message(message.chat.id, welcome_text, reply_markup=get_main_keyboard())
             return
         
-        # Check if user has pending request
         if user_id in pending_requests:
             welcome_text = f"""✨ STAR LINK CODE HACK ✨
 
@@ -395,13 +370,11 @@ Welcome to Admin Panel!"""
             await bot.send_message(message.chat.id, welcome_text, reply_markup=get_main_keyboard())
             return
         
-        # New user - send request to admin
         pending_requests[user_id] = {
             'name': user_name,
             'timestamp': time.time()
         }
         
-        # Notify all admins
         for admin_id in ADMINS:
             try:
                 admin_text = f"""🔔 **NEW USER REQUEST**
@@ -440,7 +413,6 @@ Please approve or reject this request."""
 
 @bot.message_handler(commands=['admin'])
 async def admin_panel(message):
-    """Admin panel command"""
     try:
         if not is_admin(message.chat.id):
             await bot.reply_to(message, "⛔ You are not authorized to use this command.")
@@ -459,7 +431,6 @@ async def admin_panel(message):
 
 @bot.message_handler(commands=['genkey_user'])
 async def genkey_user(message):
-    """Generate key for user"""
     try:
         if not is_admin(message.chat.id):
             await bot.reply_to(message, "⛔ You are not authorized!")
@@ -481,13 +452,11 @@ async def genkey_user(message):
         user_id = args[1]
         plan = args[2] if len(args) > 2 else "unlimited"
         
-        # Validate plan
         valid_plans = ["30m", "1h", "1d", "7d", "1m", "1y", "unlimited"]
         if plan not in valid_plans:
             await bot.reply_to(
                 message,
-                f"❌ Invalid plan: `{plan}`\n\n"
-                f"Valid plans: {', '.join(valid_plans)}",
+                f"❌ Invalid plan: `{plan}`\n\nValid plans: {', '.join(valid_plans)}",
                 parse_mode="Markdown"
             )
             return
@@ -520,7 +489,6 @@ async def genkey_user(message):
             )
             add_admin_log("Key Generated", f"User: {user_id} | Plan: {plan}")
             
-            # Notify user
             try:
                 await bot.send_message(
                     int(user_id),
@@ -540,7 +508,6 @@ async def genkey_user(message):
 
 @bot.message_handler(commands=['delkey_user'])
 async def delkey_user(message):
-    """Delete key for user"""
     try:
         if not is_admin(message.chat.id):
             await bot.reply_to(message, "⛔ You are not authorized!")
@@ -575,7 +542,6 @@ async def delkey_user(message):
             )
             add_admin_log("Key Deleted", f"User: {user_id}")
             
-            # Notify user
             try:
                 await bot.send_message(
                     int(user_id),
@@ -592,7 +558,6 @@ async def delkey_user(message):
 
 @bot.message_handler(commands=['broadcast_send'])
 async def broadcast_send(message):
-    """Send broadcast message"""
     try:
         if not is_admin(message.chat.id):
             await bot.reply_to(message, "⛔ You are not authorized!")
@@ -634,7 +599,6 @@ async def broadcast_send(message):
 
 @bot.message_handler(commands=['listkeys'])
 async def listkeys(message):
-    """List all keys"""
     try:
         if not is_admin(message.chat.id):
             await bot.reply_to(message, "⛔ You are not authorized!")
@@ -691,7 +655,6 @@ async def listkeys(message):
 
 @bot.message_handler(commands=['setportal'])
 async def set_portal(message):
-    """Set global portal URL for all users"""
     try:
         if not is_admin(message.chat.id):
             await bot.reply_to(message, "⛔ You are not authorized!")
@@ -715,9 +678,7 @@ async def set_portal(message):
         
         await bot.reply_to(
             message,
-            f"✅ **Global Portal URL Set**\n\n"
-            f"🔗 URL: `{url}`\n\n"
-            f"All users can now use this URL.",
+            f"✅ **Global Portal URL Set**\n\n🔗 URL: `{url}`\n\nAll users can now use this URL.",
             parse_mode="Markdown"
         )
         add_admin_log("Global Portal URL Set", f"URL: {url}")
@@ -727,7 +688,6 @@ async def set_portal(message):
 
 @bot.message_handler(commands=['key'])
 async def handle_key(message):
-    """Handle key verification"""
     try:
         args = message.text.split()
         if len(args) < 2:
@@ -761,7 +721,6 @@ async def handle_key(message):
                     message,
                     f"✅ PAID USER ဖြစ်ပါပြီ။\n\nUSER ID: {user_id}"
                 )
-                # Remove from pending if exists
                 pending_requests.pop(user_id, None)
             else:
                 await bot.reply_to(
@@ -779,7 +738,6 @@ async def handle_key(message):
 
 @bot.message_handler(commands=['status'])
 async def status(message):
-    """Status command"""
     try:
         if not is_admin(message.chat.id):
             await bot.reply_to(message, "⛔ No Permission")
@@ -804,7 +762,6 @@ async def status(message):
 
 @bot.message_handler(commands=['portal'])
 async def handle_portal(message):
-    """Portal URL handler - uses global portal if set"""
     try:
         user_id = str(message.chat.id)
         
@@ -813,12 +770,9 @@ async def handle_portal(message):
             return
         
         args = message.text.split(maxsplit=1)
-        
-        # Use global portal URL if admin set it
         global global_portal_url
         
         if global_portal_url and len(args) < 2:
-            # Auto use global portal
             if message.chat.id not in user_data:
                 user_data[message.chat.id] = {}
             
@@ -826,9 +780,7 @@ async def handle_portal(message):
             
             await bot.reply_to(
                 message, 
-                f"✅ **Portal URL Set (Global)**\n\n"
-                f"🔗 URL: `{global_portal_url}`\n\n"
-                f"VOUCHER ရွေးချယ်ရန် Menu ကိုသုံးပါ။",
+                f"✅ **Portal URL Set (Global)**\n\n🔗 URL: `{global_portal_url}`\n\nVOUCHER ရွေးချယ်ရန် Menu ကိုသုံးပါ။",
                 reply_markup=get_voucher_keyboard(),
                 parse_mode="Markdown"
             )
@@ -838,18 +790,13 @@ async def handle_portal(message):
             if global_portal_url:
                 await bot.reply_to(
                     message,
-                    f"🔗 **Using Global Portal URL**\n\n"
-                    f"URL: `{global_portal_url}`\n\n"
-                    f"To set custom URL:\n`/portal your_custom_url`",
+                    f"🔗 **Using Global Portal URL**\n\nURL: `{global_portal_url}`\n\nTo set custom URL: `/portal your_custom_url`",
                     parse_mode="Markdown"
                 )
             else:
                 await bot.reply_to(
                     message, 
-                    "🔗 Portal URL ထည့်သွင်းရန်:\n\n"
-                    "/portal [your_portal_url]\n\n"
-                    "ဥပမာ:\n"
-                    "/portal https://portal-as.ruijienetworks.com/download/static/maccauth/src/index.html?lang=en_US&mac=02:00:00:00:00:00"
+                    "🔗 Portal URL ထည့်သွင်းရန်:\n\n/portal [your_portal_url]"
                 )
             return
         
@@ -873,22 +820,21 @@ async def handle_portal(message):
 
 @bot.callback_query_handler(func=lambda call: True)
 async def callback_handler(call):
-    """Main callback handler"""
     try:
         chat_id = call.message.chat.id
         user_id = str(chat_id)
         
-        # ===== HANDLE PENDING REQUESTS (Accept/Reject) =====
+        # Handle pending requests (Accept/Reject)
         if call.data.startswith("accept_") or call.data.startswith("reject_"):
             await handle_pending_request(call)
             return
         
-        # ===== ADMIN CALLBACKS =====
+        # Admin callbacks
         if call.data.startswith('admin_') or call.data.startswith('plan_'):
             await admin_callback_handler(call)
             return
         
-        # ===== NORMAL USER CALLBACKS =====
+        # Normal user callbacks
         if call.data == "menu_back":
             await handle_menu_back(call)
             return
@@ -902,4 +848,85 @@ async def callback_handler(call):
             return
         
         if call.data == "menu_paid":
-            await handle
+            await handle_paid(call)
+            return
+        
+        if call.data == "menu_enter_userid":
+            await handle_enter_userid(call)
+            return
+        
+        if call.data == "menu_result":
+            await handle_result(call)
+            return
+        
+        if call.data == "menu_recheck":
+            await handle_recheck(call)
+            return
+        
+        if call.data == "menu_stop":
+            await handle_stop(call)
+            return
+        
+        if call.data.startswith("scan_"):
+            await handle_scan_selection(call)
+            return
+        
+        if call.data.startswith("digit_"):
+            await handle_digit_selection(call)
+            return
+        
+        await bot.answer_callback_query(call.id, "❌ Unknown option", show_alert=True)
+    except Exception as e:
+        logger.error(f"Callback error: {e}")
+        try:
+            await bot.answer_callback_query(call.id, f"❌ Error", show_alert=True)
+        except:
+            pass
+
+# ==================== PENDING REQUEST HANDLER ====================
+
+async def handle_pending_request(call):
+    try:
+        chat_id = call.message.chat.id
+        user_id = str(chat_id)
+        
+        if not is_admin(user_id):
+            await bot.answer_callback_query(call.id, "⛔ You are not an admin!", show_alert=True)
+            return
+        
+        action, target_user = call.data.split("_")
+        
+        if action == "accept":
+            # Accept user - generate key automatically
+            plan = "1m"  # Default plan for new users
+            expiry = generate_expiry(plan)
+            
+            auth_list, sha = await get_file_content("auth_list.json")
+            if auth_list is None:
+                auth_list = {}
+            
+            auth_list[target_user] = {
+                "expires_at": expiry,
+                "plan": plan
+            }
+            
+            await update_file_content(
+                "auth_list.json",
+                auth_list,
+                sha,
+                f"Accept user {target_user} via Admin Panel"
+            )
+            
+            # Add to approved users
+            approve[int(target_user)] = True
+            paid_users[target_user] = True
+            
+            # Remove from pending
+            pending_requests.pop(target_user, None)
+            
+            # Notify user
+            try:
+                await bot.send_message(
+                    int(target_user),
+                    f"✅ **Your request has been APPROVED!**\n\n"
+                    f"
